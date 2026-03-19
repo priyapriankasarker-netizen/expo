@@ -1,4 +1,5 @@
-import { ExpoModifier } from '../../types';
+import * as React from 'react';
+import { type ModifierConfig } from '../../types';
 /**
  * Font weight options for text styling.
  */
@@ -19,6 +20,34 @@ export type TextDecoration = 'none' | 'underline' | 'lineThrough';
  * Text overflow behavior options.
  */
 export type TextOverflow = 'clip' | 'ellipsis' | 'visible';
+/**
+ * Font family for text styling.
+ * Built-in system families: 'default', 'sansSerif', 'serif', 'monospace', 'cursive'.
+ * Custom font families loaded via expo-font can be referenced by name (e.g., 'Inter-Bold').
+ */
+export type TextFontFamily = 'default' | 'sansSerif' | 'serif' | 'monospace' | 'cursive' | (string & {});
+/**
+ * Text shadow configuration.
+ * Corresponds to Jetpack Compose's Shadow class.
+ */
+export type TextShadow = {
+    /**
+     * The color of the shadow.
+     */
+    color?: string;
+    /**
+     * The horizontal offset of the shadow in dp.
+     */
+    offsetX?: number;
+    /**
+     * The vertical offset of the shadow in dp.
+     */
+    offsetY?: number;
+    /**
+     * The blur radius of the shadow in dp.
+     */
+    blurRadius?: number;
+};
 /**
  * Material 3 Typography scale styles.
  * Corresponds to MaterialTheme.typography in Jetpack Compose.
@@ -62,6 +91,10 @@ export type TextStyle = {
      */
     textDecoration?: TextDecoration;
     /**
+     * The font family.
+     */
+    fontFamily?: TextFontFamily;
+    /**
      * The letter spacing in sp.
      */
     letterSpacing?: number;
@@ -69,10 +102,26 @@ export type TextStyle = {
      * The line height in sp.
      */
     lineHeight?: number;
+    /**
+     * The background color behind the text.
+     */
+    background?: string;
+    /**
+     * The shadow applied to the text.
+     */
+    shadow?: TextShadow;
 };
 export type TextProps = {
     /**
-     * The text content to display.
+     * The text content to display. Can be a string, number, or nested Text components
+     * for inline styled spans.
+     *
+     * @example
+     * ```tsx
+     * <Text style={{ fontWeight: "bold" }}>
+     *   Hello <Text style={{ fontStyle: "italic" }}>world</Text>
+     * </Text>
+     * ```
      */
     children?: React.ReactNode;
     /**
@@ -108,7 +157,7 @@ export type TextProps = {
     /**
      * Modifiers for the component.
      */
-    modifiers?: ExpoModifier[];
+    modifiers?: ModifierConfig[];
 };
 /**
  * Renders a Text component using Jetpack Compose.
@@ -178,5 +227,5 @@ export type TextProps = {
  * </Text>
  * ```
  */
-export declare function Text(props: TextProps): import("react").JSX.Element;
+export declare function Text(props: TextProps): React.JSX.Element;
 //# sourceMappingURL=index.d.ts.map

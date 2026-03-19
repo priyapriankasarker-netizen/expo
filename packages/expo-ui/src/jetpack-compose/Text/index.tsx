@@ -1,6 +1,7 @@
 import { requireNativeView } from 'expo';
+import * as React from 'react';
 
-import { ExpoModifier } from '../../types';
+import { type ModifierConfig } from '../../types';
 import { getTextFromChildren } from '../../utils';
 import { createViewModifierEventListener } from '../modifiers/utils';
 
@@ -39,6 +40,42 @@ export type TextDecoration = 'none' | 'underline' | 'lineThrough';
  * Text overflow behavior options.
  */
 export type TextOverflow = 'clip' | 'ellipsis' | 'visible';
+
+/**
+ * Font family for text styling.
+ * Built-in system families: 'default', 'sansSerif', 'serif', 'monospace', 'cursive'.
+ * Custom font families loaded via expo-font can be referenced by name (e.g., 'Inter-Bold').
+ */
+export type TextFontFamily =
+  | 'default'
+  | 'sansSerif'
+  | 'serif'
+  | 'monospace'
+  | 'cursive'
+  | (string & {});
+
+/**
+ * Text shadow configuration.
+ * Corresponds to Jetpack Compose's Shadow class.
+ */
+export type TextShadow = {
+  /**
+   * The color of the shadow.
+   */
+  color?: string;
+  /**
+   * The horizontal offset of the shadow in dp.
+   */
+  offsetX?: number;
+  /**
+   * The vertical offset of the shadow in dp.
+   */
+  offsetY?: number;
+  /**
+   * The blur radius of the shadow in dp.
+   */
+  blurRadius?: number;
+};
 
 /**
  * Material 3 Typography scale styles.
@@ -105,6 +142,11 @@ export type TextStyle = {
   textDecoration?: TextDecoration;
 
   /**
+   * The font family.
+   */
+  fontFamily?: TextFontFamily;
+
+  /**
    * The letter spacing in sp.
    */
   letterSpacing?: number;
@@ -113,11 +155,46 @@ export type TextStyle = {
    * The line height in sp.
    */
   lineHeight?: number;
+
+  /**
+   * The background color behind the text.
+   */
+  background?: string;
+
+  /**
+   * The shadow applied to the text.
+   */
+  shadow?: TextShadow;
+};
+
+/**
+ * A record representing a styled text span, used for nested Text rendering.
+ * Each span carries its own style overrides that merge with the parent's base style.
+ */
+type TextSpanRecord = {
+  text: string;
+  color?: string;
+  fontSize?: number;
+  fontWeight?: TextFontWeight;
+  fontStyle?: TextFontStyle;
+  fontFamily?: TextFontFamily;
+  textDecoration?: TextDecoration;
+  letterSpacing?: number;
+  background?: string;
+  shadow?: TextShadow;
 };
 
 export type TextProps = {
   /**
-   * The text content to display.
+   * The text content to display. Can be a string, number, or nested Text components
+   * for inline styled spans.
+   *
+   * @example
+   * ```tsx
+   * <Text style={{ fontWeight: "bold" }}>
+   *   Hello <Text style={{ fontStyle: "italic" }}>world</Text>
+   * </Text>
+   * ```
    */
   children?: React.ReactNode;
 
@@ -160,19 +237,23 @@ export type TextProps = {
   /**
    * Modifiers for the component.
    */
-  modifiers?: ExpoModifier[];
+  modifiers?: ModifierConfig[];
 };
 
 type NativeTextProps = Omit<TextProps, 'children' | 'style'> & {
-  text: string;
+  text?: string;
+  spans?: TextSpanRecord[];
   typography?: TypographyStyle;
   fontSize?: number;
   fontWeight?: TextFontWeight;
   fontStyle?: TextFontStyle;
+  fontFamily?: TextFontFamily;
   textAlign?: TextAlign;
   textDecoration?: TextDecoration;
   letterSpacing?: number;
   lineHeight?: number;
+  background?: string;
+  shadow?: TextShadow;
 };
 
 const TextNativeView: React.ComponentType<NativeTextProps> = requireNativeView(
@@ -180,24 +261,116 @@ const TextNativeView: React.ComponentType<NativeTextProps> = requireNativeView(
   'TextView'
 );
 
+/**
+ * Extracts style-related fields from TextProps into a partial TextSpanRecord.
+ */
+function extractSpanStyle(props: TextProps): Omit<TextSpanRecord, 'text'> {
+  return {
+    color: props.color,
+    fontSize: props.style?.fontSize,
+    fontWeight: props.style?.fontWeight,
+    fontStyle: props.style?.fontStyle,
+    fontFamily: props.style?.fontFamily,
+    textDecoration: props.style?.textDecoration,
+    letterSpacing: props.style?.letterSpacing,
+    background: props.style?.background,
+    shadow: props.style?.shadow,
+  };
+}
+
+/**
+ * Merges a parent span style with a child span style.
+ * Child values take precedence; parent values are used as fallback.
+ */
+function mergeSpanStyles(
+  parent: Omit<TextSpanRecord, 'text'>,
+  child: Omit<TextSpanRecord, 'text'>
+): Omit<TextSpanRecord, 'text'> {
+  return {
+    color: child.color ?? parent.color,
+    fontSize: child.fontSize ?? parent.fontSize,
+    fontWeight: child.fontWeight ?? parent.fontWeight,
+    fontStyle: child.fontStyle ?? parent.fontStyle,
+    fontFamily: child.fontFamily ?? parent.fontFamily,
+    textDecoration: child.textDecoration ?? parent.textDecoration,
+    letterSpacing: child.letterSpacing ?? parent.letterSpacing,
+    background: child.background ?? parent.background,
+    shadow: child.shadow ?? parent.shadow,
+  };
+}
+
+/**
+ * Recursively walks children, flattening nested <Text> elements into a flat
+ * spans array. Each span carries fully resolved styles (merged from ancestors).
+ * Returns null if there are no nested Text elements (simple text path).
+ */
+function collectSpans(
+  children: React.ReactNode,
+  inheritedStyle: Omit<TextSpanRecord, 'text'> = {}
+): TextSpanRecord[] | null {
+  if (children === undefined || children === null) return null;
+
+  const childArray = React.Children.toArray(children);
+  if (childArray.length === 0) return null;
+
+  const hasNestedText = childArray.some(
+    (child) => React.isValidElement(child) && child.type === Text
+  );
+
+  if (!hasNestedText) return null;
+
+  const spans: TextSpanRecord[] = [];
+
+  for (const child of childArray) {
+    if (typeof child === 'string') {
+      spans.push({ text: child, ...inheritedStyle });
+    } else if (typeof child === 'number') {
+      spans.push({ text: String(child), ...inheritedStyle });
+    } else if (React.isValidElement(child) && child.type === Text) {
+      const childProps = child.props as TextProps;
+      const childStyle = mergeSpanStyles(inheritedStyle, extractSpanStyle(childProps));
+
+      // Recurse into this child's children
+      const nestedSpans = collectSpans(childProps.children, childStyle);
+      if (nestedSpans) {
+        spans.push(...nestedSpans);
+      } else {
+        // Leaf text node — extract plain text
+        const text = getTextFromChildren(childProps.children);
+        if (text) {
+          spans.push({ text, ...childStyle });
+        }
+      }
+    }
+  }
+
+  return spans.length > 0 ? spans : null;
+}
+
 function transformTextProps(props: TextProps): NativeTextProps {
   const { children, modifiers, style, ...restProps } = props;
+
+  const spans = collectSpans(children);
 
   return {
     modifiers,
     ...(modifiers ? createViewModifierEventListener(modifiers) : undefined),
     ...restProps,
-    text: getTextFromChildren(children) ?? '',
+    // When spans are present, use them instead of flat text
+    ...(spans ? { spans } : { text: getTextFromChildren(children) ?? '' }),
     // Extract typography from style (used as base style)
     typography: style?.typography,
     // Flatten other style properties (these override the typography style)
     fontSize: style?.fontSize,
     fontWeight: style?.fontWeight,
     fontStyle: style?.fontStyle,
+    fontFamily: style?.fontFamily,
     textAlign: style?.textAlign,
     textDecoration: style?.textDecoration,
     letterSpacing: style?.letterSpacing,
     lineHeight: style?.lineHeight,
+    background: style?.background,
+    shadow: style?.shadow,
   };
 }
 

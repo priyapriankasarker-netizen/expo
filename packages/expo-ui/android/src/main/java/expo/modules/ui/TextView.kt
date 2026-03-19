@@ -1,16 +1,27 @@
 package expo.modules.ui
 
+import android.content.Context
 import android.graphics.Color
+import android.graphics.Typeface
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.sp
+import com.facebook.react.common.assets.ReactFontManager
+import expo.modules.kotlin.records.Field
+import expo.modules.kotlin.records.Record
 import expo.modules.kotlin.types.Enumerable
 import expo.modules.kotlin.views.ComposeProps
 import expo.modules.kotlin.views.FunctionalComposableScope
@@ -105,6 +116,36 @@ enum class TextOverflowType(val value: String) : Enumerable {
   }
 }
 
+fun resolveFontFamily(name: String?, context: Context): FontFamily? {
+  if (name == null) return null
+  return when (name) {
+    "default" -> FontFamily.Default
+    "sansSerif" -> FontFamily.SansSerif
+    "serif" -> FontFamily.Serif
+    "monospace" -> FontFamily.Monospace
+    "cursive" -> FontFamily.Cursive
+    else -> {
+      val typeface = ReactFontManager.getInstance().getTypeface(name, Typeface.NORMAL, context.assets)
+      FontFamily(typeface)
+    }
+  }
+}
+
+data class TextShadowRecord(
+  @Field val color: Color? = null,
+  @Field val offsetX: Float? = null,
+  @Field val offsetY: Float? = null,
+  @Field val blurRadius: Float? = null
+) : Record {
+  fun toComposeShadow(): Shadow {
+    return Shadow(
+      color = colorToComposeColorOrNull(color) ?: androidx.compose.ui.graphics.Color.Black,
+      offset = Offset(offsetX ?: 0f, offsetY ?: 0f),
+      blurRadius = blurRadius ?: 0f
+    )
+  }
+}
+
 enum class TypographyStyle(val value: String) : Enumerable {
   DISPLAY_LARGE("displayLarge"),
   DISPLAY_MEDIUM("displayMedium"),
@@ -145,17 +186,34 @@ enum class TypographyStyle(val value: String) : Enumerable {
   }
 }
 
+data class TextSpanRecord(
+  @Field val text: String = "",
+  @Field val color: Color? = null,
+  @Field val fontSize: Float? = null,
+  @Field val fontWeight: TextFontWeight? = null,
+  @Field val fontStyle: TextFontStyle? = null,
+  @Field val fontFamily: String? = null,
+  @Field val textDecoration: TextDecorationType? = null,
+  @Field val letterSpacing: Float? = null,
+  @Field val background: Color? = null,
+  @Field val shadow: TextShadowRecord? = null
+) : Record
+
 data class TextProps(
   val text: String = "",
+  val spans: List<TextSpanRecord>? = null,
   val color: Color? = null,
   val typography: TypographyStyle? = null,
   val fontSize: Float? = null,
   val fontWeight: TextFontWeight? = null,
   val fontStyle: TextFontStyle? = null,
+  val fontFamily: String? = null,
   val textAlign: TextAlignType? = null,
   val textDecoration: TextDecorationType? = null,
   val letterSpacing: Float? = null,
   val lineHeight: Float? = null,
+  val background: Color? = null,
+  val shadow: TextShadowRecord? = null,
   val overflow: TextOverflowType? = null,
   val softWrap: Boolean? = null,
   val maxLines: Int? = null,
@@ -171,24 +229,62 @@ fun FunctionalComposableScope.TextContent(props: TextProps) {
   // Merge base style with custom properties
   val mergedStyle = baseStyle.merge(
     TextStyle(
+      color = colorToComposeColor(props.color),
       fontSize = props.fontSize?.sp ?: androidx.compose.ui.unit.TextUnit.Unspecified,
       fontWeight = props.fontWeight?.toComposeFontWeight(),
       fontStyle = props.fontStyle?.toComposeFontStyle(),
+      fontFamily = appContext.reactContext?.let { resolveFontFamily(props.fontFamily, it) },
       textDecoration = props.textDecoration?.toComposeTextDecoration(),
       letterSpacing = props.letterSpacing?.sp ?: androidx.compose.ui.unit.TextUnit.Unspecified,
-      lineHeight = props.lineHeight?.sp ?: androidx.compose.ui.unit.TextUnit.Unspecified
+      lineHeight = props.lineHeight?.sp ?: androidx.compose.ui.unit.TextUnit.Unspecified,
+      background = colorToComposeColorOrNull(props.background) ?: androidx.compose.ui.graphics.Color.Unspecified,
+      shadow = props.shadow?.toComposeShadow()
     )
   )
 
-  Text(
-    text = props.text,
-    modifier = ModifierRegistry.applyModifiers(props.modifiers, appContext, composableScope, globalEventDispatcher),
-    color = colorToComposeColor(props.color),
-    textAlign = props.textAlign?.toComposeTextAlign(),
-    overflow = props.overflow?.toComposeTextOverflow() ?: TextOverflow.Clip,
-    softWrap = props.softWrap ?: true,
-    maxLines = props.maxLines ?: Int.MAX_VALUE,
-    minLines = props.minLines ?: 1,
-    style = mergedStyle
-  )
+  val modifier = ModifierRegistry.applyModifiers(props.modifiers, appContext, composableScope, globalEventDispatcher)
+
+  if (props.spans != null) {
+    val annotatedString = buildAnnotatedString {
+      for (span in props.spans) {
+        withStyle(
+          SpanStyle(
+            color = colorToComposeColorOrNull(span.color) ?: androidx.compose.ui.graphics.Color.Unspecified,
+            fontSize = span.fontSize?.sp ?: androidx.compose.ui.unit.TextUnit.Unspecified,
+            fontWeight = span.fontWeight?.toComposeFontWeight(),
+            fontStyle = span.fontStyle?.toComposeFontStyle(),
+            fontFamily = appContext.reactContext?.let { resolveFontFamily(span.fontFamily, it) },
+            textDecoration = span.textDecoration?.toComposeTextDecoration(),
+            letterSpacing = span.letterSpacing?.sp ?: androidx.compose.ui.unit.TextUnit.Unspecified,
+            background = colorToComposeColorOrNull(span.background) ?: androidx.compose.ui.graphics.Color.Unspecified,
+            shadow = span.shadow?.toComposeShadow()
+          )
+        ) {
+          append(span.text)
+        }
+      }
+    }
+
+    Text(
+      text = annotatedString,
+      modifier = modifier,
+      textAlign = props.textAlign?.toComposeTextAlign(),
+      overflow = props.overflow?.toComposeTextOverflow() ?: TextOverflow.Clip,
+      softWrap = props.softWrap ?: true,
+      maxLines = props.maxLines ?: Int.MAX_VALUE,
+      minLines = props.minLines ?: 1,
+      style = mergedStyle
+    )
+  } else {
+    Text(
+      text = props.text,
+      modifier = modifier,
+      textAlign = props.textAlign?.toComposeTextAlign(),
+      overflow = props.overflow?.toComposeTextOverflow() ?: TextOverflow.Clip,
+      softWrap = props.softWrap ?: true,
+      maxLines = props.maxLines ?: Int.MAX_VALUE,
+      minLines = props.minLines ?: 1,
+      style = mergedStyle
+    )
+  }
 }
