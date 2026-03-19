@@ -4,6 +4,8 @@
 
 ### 🛠 Breaking changes
 
+- Bumped minimum iOS/tvOS version to 16.4, macOS to 13.4. ([#43296](https://github.com/expo/expo/pull/43296) by [@tsapeta](https://github.com/tsapeta))
+
 ### 🎉 New features
 
 - [Android] Add programmatic selection support for markers via `selectMarker()` ref method. ([#42189](https://github.com/expo/expo/pull/42189) by [@huextrat](https://github.com/huextrat))
